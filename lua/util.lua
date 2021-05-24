@@ -119,33 +119,33 @@ local blame_parse = function(output)
         end
     end
 
-    vim.b.hash_to_commit = commits
-    vim.b.line_to_hash   = hashes
+    vim.b.blamer_hash_to_commit = commits
+    vim.b.blamer_line_to_hash   = hashes
 end
 
 
 local job_event = function(chan_id, data, event)
 
-    if (vim.b.job_output == nil) then
-        vim.b.job_output = {}
+    if (vim.b.blamer_job_output == nil) then
+        vim.b.blamer_job_output = {}
     end
 
-    local output = vim.b.job_output
+    local output = vim.b.blamer_job_output
 
     if event == 'stdout' then
         table.move(data, 1, #data, #output + 1, output)
-        vim.b.job_output = output
+        vim.b.blamer_job_output = output
     elseif event == 'exit' then
         blame_parse(output)
         print("background parse complete");
 
-        vim.b.job_id     = nil
-        vim.b.job_output = nil
+        vim.b.blamer_job_id     = nil
+        vim.b.blamer_job_output = nil
     end
 end
 
 local blame_launch = function(filename)
-    if vim.b.job_id ~= nil then
+    if vim.b.blamer_job_id ~= nil then
         -- already one running
         return
     end
@@ -153,9 +153,32 @@ local blame_launch = function(filename)
     -- TODO need some checking here before we actually launch a job -- 
     local dir     = dirname(filename)
     local name    = basename(filename)
+
+    if vim.b.blamer_enabled == nil then
+        -- run some checks before we actually try to blame in the background
+        -- specifically we need to check to see if this file is in a git repo
+        -- and if this file is part of that repo.  
+        --
+        -- An error code from this command means that one of the two isn't true
+        local command = "git -C " .. dir .. " ls-files --error-unmatch " .. name
+        local output = vim.fn.system(command)
+        output = output:lower()
+        if output:match("^fatal: not a git repository") or 
+           output:match("^error: pathspec .* did not match any file") then
+             vim.b.blamer_enabled = false
+             return
+        end
+        vim.b.blamer_enabled = true
+    end
+
+    if vim.b.blamer_enabled == false then
+        -- we've decided that we can't blame for this file.  Skip it
+        return;
+    end
+
     local command = "git -C " .. dir .. " blame --porcelain --incremental " .. name
     print("starting background blame with command: '" .. command .. "'")
-    vim.b.job_id = vim.fn.jobstart(command, { on_stdout = job_event, on_exit = job_event })
+    vim.b.blamer_job_id = vim.fn.jobstart(command, { on_stdout = job_event, on_exit = job_event })
     return
 end
 
@@ -164,7 +187,7 @@ local git_blame_line_info = function(filename, line_num)
 
     local err = nil
 
-    local line_to_hash = vim.b.line_to_hash
+    local line_to_hash = vim.b.blamer_line_to_hash
     local hash = nil
     if line_to_hash ~= nil then
         hash = line_to_hash[line_num]
@@ -178,7 +201,7 @@ local git_blame_line_info = function(filename, line_num)
         return nil, err
     end
 
-    local hash_to_commit = vim.b.hash_to_commit
+    local hash_to_commit = vim.b.blamer_hash_to_commit
     local info = hash_to_commit[hash]
     if info == nil then
         return nil, err
