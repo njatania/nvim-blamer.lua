@@ -137,8 +137,10 @@ local job_event = function(chan_id, data, event)
         vim.b.blamer_job_output = output
     elseif event == 'exit' then
         blame_parse(output)
-        print("background parse complete");
+        local elapsed = os.time() - vim.b.blamer_job_start;
+        print("background parse complete (elapsed time " .. elapsed .. " seconds)");
 
+        vim.b.blamer_job_start  = nil
         vim.b.blamer_job_id     = nil
         vim.b.blamer_job_output = nil
     end
@@ -179,6 +181,7 @@ local blame_launch = function(filename)
     local command = "git -C " .. dir .. " blame --porcelain --incremental " .. name
     print("starting background blame with command: '" .. command .. "'")
     vim.b.blamer_job_id = vim.fn.jobstart(command, { on_stdout = job_event, on_exit = job_event })
+    vim.b.blamer_job_start = os.time()
     return
 end
 
