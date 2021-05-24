@@ -81,13 +81,6 @@ local git_not_committed_hash = '0000000000000000000000000000000000000000'
 --   "author-tz": "+0800",
 -- }
 
-local job_id = nil
-local job_output = {}
-
-local get_blame_info_impl = function(filename, line_num)
-    return vim.fn.system(string.format('LC_ALL=C git --no-pager blame --line-porcelain -L %d,+1 %s', line_num, filename))
-end
-
 local blame_parse = function(output)
     local commits = {}
     local hashes = {}
@@ -141,23 +134,37 @@ end
 
 
 local job_event = function(chan_id, data, event)
+
+
+    if (vim.b.job_output == nil) then
+        vim.b.job_output = {}
+    end
+
+    local output = vim.b.job_output
+
     if event == 'stdout' then
-        table.move(data, 1, #data, #job_output + 1, job_output)
+        table.move(data, 1, #data, #output + 1, output)
+        vim.b.job_output = output
     elseif event == 'exit' then
         vim.api.nvim_command('echomsg "background blame complete"')
-        blame_parse(job_output)
+        blame_parse(output)
         vim.api.nvim_command('echomsg "background parse complete"')
 
-        job_id     = nil
-        job_output = {}
+        vim.b.job_id     = nil
+        vim.b.job_output = nil
     end
 end
 
 local blame_launch = function(filename)
+    if vim.b.job_id ~= nil then
+        -- already one running
+        return
+    end
+
     -- TODO need some checking here before we actually launch a job -- 
     print("starting background blame")
     local command = "git blame --porcelain --incremental " .. filename
-    job_id = vim.fn.jobstart(command, { on_stdout = job_event, on_exit = job_event })
+    vim.b.job_id = vim.fn.jobstart(command, { on_stdout = job_event, on_exit = job_event })
     return
 end
 
@@ -174,14 +181,10 @@ local git_blame_line_info = function(filename, line_num)
 
     print("hash value is: ", hash)
     if hash == nil then
-        -- either this file isn't in git or our background job is running.
+        -- start a background job to collect git blame information
+        blame_launch(filename)
 
-        print("job_id value is: ", job_id)
-        if job_id == nil then
-            job_id = blame_launch(filename)
-        end
-
-        -- regardless, there's nothing to show right now, so just return
+        -- there's nothing to show right now
         return nil, err
     end
 
