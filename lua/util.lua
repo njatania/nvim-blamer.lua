@@ -62,24 +62,23 @@ function show_date_relative(ts)
     return math.floor((diff + 183) / 365) .. " years ago"
 end
 
--- Not Committed Yet
-local git_not_committed_hash = '0000000000000000000000000000000000000000'
+local dirname = function(filename)
+    local sep='/'
+    local dir = filename:match("(.*"..sep..")")
+    if (dir == nil) then
+        dir = "."
+    end
+    return dir
+end
 
--- {
---   "filename": "lua/blamer.lua",
---   "hash": "db43ae622dbec1ba3fd8172c2d4fed1b2980c39c",
---   "summary": "fix: bypass ft list: rename LuaTree to NvimTree. do not show Not Committed Yet msg",
---
---   "committer": "荒野無燈",
---   "committer-mail": "<a@example.com>",
---   "committer-tz": "+0800",
---   "committer-time": "1610563580",
---
---   "author": "荒野無燈",
---   "author-mail": "<a@example.com>",
---   "author-time": "1610563580",
---   "author-tz": "+0800",
--- }
+local basename = function(filename)
+    local sep='/'
+    local name = filename:match(".*"..sep.."(.*)")
+    if (name == nil) then
+        name = filename
+    end
+    return name
+end
 
 local blame_parse = function(output)
     local commits = {}
@@ -89,7 +88,7 @@ local blame_parse = function(output)
 
     for index, line in ipairs(output) do 
         for k, v in line:gmatch("([a-z0-9-]+) ([^\n]+)\n?") do
-            print(k .. ' -> ' .. v)
+            -- print(k .. ' -> ' .. v)
             local field = k:match('^([a-z0-9-]+)')
             if field then
                 if field:len() == 40 then
@@ -104,7 +103,6 @@ local blame_parse = function(output)
                         hashes[line_number + count ] = commit.hash
                     end
                 elseif field == 'filename' then
-                    print "end of a block"
                     if commits[commit.hash] == nil then
                         commits[commit.hash] = commit
                     end
@@ -121,20 +119,12 @@ local blame_parse = function(output)
         end
     end
 
-    for k,v in pairs(commits) do
-        print(k,v)
-        for ck, cv in pairs(v) do
-            print("    " .. ck .. cv)
-        end
-    end
-
-    vim.b.line_to_hash   = hashes
     vim.b.hash_to_commit = commits
+    vim.b.line_to_hash   = hashes
 end
 
 
 local job_event = function(chan_id, data, event)
-
 
     if (vim.b.job_output == nil) then
         vim.b.job_output = {}
@@ -146,9 +136,8 @@ local job_event = function(chan_id, data, event)
         table.move(data, 1, #data, #output + 1, output)
         vim.b.job_output = output
     elseif event == 'exit' then
-        vim.api.nvim_command('echomsg "background blame complete"')
         blame_parse(output)
-        vim.api.nvim_command('echomsg "background parse complete"')
+        print("background parse complete");
 
         vim.b.job_id     = nil
         vim.b.job_output = nil
@@ -162,8 +151,10 @@ local blame_launch = function(filename)
     end
 
     -- TODO need some checking here before we actually launch a job -- 
-    print("starting background blame")
-    local command = "git blame --porcelain --incremental " .. filename
+    local dir     = dirname(filename)
+    local name    = basename(filename)
+    local command = "git -C " .. dir .. " blame --porcelain --incremental " .. name
+    print("starting background blame with command: '" .. command .. "'")
     vim.b.job_id = vim.fn.jobstart(command, { on_stdout = job_event, on_exit = job_event })
     return
 end
@@ -179,7 +170,6 @@ local git_blame_line_info = function(filename, line_num)
         hash = line_to_hash[line_num]
     end
 
-    print("hash value is: ", hash)
     if hash == nil then
         -- start a background job to collect git blame information
         blame_launch(filename)
