@@ -84,9 +84,6 @@ local git_not_committed_hash = '0000000000000000000000000000000000000000'
 local job_id = nil
 local job_output = {}
 
-local hash_to_commit = {}
-local line_to_hash = {}
-
 local get_blame_info_impl = function(filename, line_num)
     return vim.fn.system(string.format('LC_ALL=C git --no-pager blame --line-porcelain -L %d,+1 %s', line_num, filename))
 end
@@ -138,8 +135,8 @@ local blame_parse = function(output)
         end
     end
 
-    line_to_hash   = hashes
-    hash_to_commit = commits
+    vim.b.line_to_hash   = hashes
+    vim.b.hash_to_commit = commits
 end
 
 
@@ -169,7 +166,12 @@ local git_blame_line_info = function(filename, line_num)
 
     local err = nil
 
-    local hash = line_to_hash[line_num]
+    local line_to_hash = vim.b.line_to_hash
+    local hash = nil
+    if line_to_hash ~= nil then
+        hash = line_to_hash[line_num]
+    end
+
     print("hash value is: ", hash)
     if hash == nil then
         -- either this file isn't in git or our background job is running.
@@ -183,6 +185,7 @@ local git_blame_line_info = function(filename, line_num)
         return nil, err
     end
 
+    local hash_to_commit = vim.b.hash_to_commit
     local info = hash_to_commit[hash]
     if info == nil then
         return nil, err
