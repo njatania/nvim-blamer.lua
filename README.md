@@ -17,12 +17,12 @@ the `git` cli must exists in your system and in `PATH` env
 
 ## usage
 
-just install the plugin and it should works automatically.
+just install the plugin and it should work automatically.
 
 for example, use [vim-plug](https://github.com/junegunn/vim-plug)
 
 ```vim
-Plug 'ttys3/nvim-blamer.lua'
+Plug 'njatania/nvim-blamer.lua'
 
 """ must after plugin loaded, for example,
 """ if you are using vim-plug, this should put after `call plug#end()`
@@ -104,18 +104,7 @@ you can use `filename`, `hash`, `summary`, `committer`, `committer-mail`, `commi
 
 ## credits
 
-thanks for the unicode emoji from <https://github.com/romkatv/powerlevel10k/blob/3920940ea84f6fba767cbed3fe6ba0653411c706/internal/icons.zsh#L226>
-
-the idea and the init code come from https://www.reddit.com/r/neovim/comments/f1vxhl/replicate_the_basic_functionality_vscodes_gitlens/
-https://teukka.tech/vimtip-gitlens.html
+forked from <https://github.com/ttys3/nvim-blamer.lua>
 
 
-## related works
 
-<https://github.com/APZelos/blamer.nvim>
-
-<https://github.com/f-person/git-blame.nvim>
-
-<https://github.com/tveskag/nvim-blame-line>
-
-<https://github.com/zivyangll/git-blame.vim>
