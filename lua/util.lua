@@ -81,68 +81,114 @@ local git_not_committed_hash = '0000000000000000000000000000000000000000'
 --   "author-tz": "+0800",
 -- }
 
+local job_id = nil
+local job_output = {}
+
+local hash_to_commit = {}
+local line_to_hash = {}
+
 local get_blame_info_impl = function(filename, line_num)
     return vim.fn.system(string.format('LC_ALL=C git --no-pager blame --line-porcelain -L %d,+1 %s', line_num, filename))
 end
 
--- git_blame_line_info returns (blame_info, error)
-local git_blame_line_info = function(filename, line_num, get_blame_info)
-    -- https://git-scm.com/docs/git-blame#Documentation/git-blame.txt--Lltstartgtltendgt
-    -- git --no-pager blame -c --line-porcelain -L <start>,<end> [--] <file>
-    -- If <start> or <end> is a number, it specifies an absolute line number (lines count from 1).
-    if get_blame_info == nil then
-        get_blame_info = get_blame_info_impl
-    end
-    local lines = get_blame_info(filename, line_num)
+local blame_parse = function(output)
+    local commits = {}
+    local hashes = {}
+    local hash=""
+    local commit = {}
 
-    -- print(lines)
+    for index, line in ipairs(output) do 
+        for k, v in line:gmatch("([a-z0-9-]+) ([^\n]+)\n?") do
+            print(k .. ' -> ' .. v)
+            local field = k:match('^([a-z0-9-]+)')
+            if field then
+                if field:len() == 40 then
+                    commit.hash = field
 
-    local err = nil
-
-    -- errors that should ignored
-    local lower_lines = lines:lower()
-    if lower_lines:match("^fatal: no such path") or 
-    lower_lines:match("^fatal: no such ref") or 
-    lower_lines:match("^fatal: cannot stat path") or 
-    lower_lines:match("^fatal: not a git repository") or 
-    lower_lines:match("^fatal: .* is outside repository at") then
-        -- vim.api.nvim_command('echomsg "the whole file not committed or not git repo"')
-        return nil, err
-    end
-
-    -- errors that should ignored
-    if lines:match(git_not_committed_hash) then
-        -- vim.api.nvim_command('echomsg "this line not committed"')
-        return nil, err
-    end
-
-    local blame_info = {}
-    for k, v in lines:gmatch("([a-z0-9-]+) ([^\n]+)\n?") do
-        -- print(k .. ' -> ' .. v)
-        local field = k:match('^([a-z0-9-]+)')
-        if field then
-            if field:len() == 40 then
-                blame_info.hash = field
-            else
-                if field == 'author-time' or field == 'committer-time' then
-                    blame_info[k .. '-human'] = show_date_relative(v)
-                    blame_info[k] = os.date('%Y-%m-%d %H:%M:%S', v)
+                    -- mark all of the lines that are covered by this block as being covered by this commit hash
+                    local line_number, count = v:match("[0-9]+ +([0-9]+) +([0-9]+)")
+                    line_number = tonumber(line_number)
+                    count = tonumber(count)
+                    while (count > 0) do
+                        count = count - 1
+                        hashes[line_number + count ] = commit.hash
+                    end
+                elseif field == 'filename' then
+                    print "end of a block"
+                    if commits[commit.hash] == nil then
+                        commits[commit.hash] = commit
+                    end
+                    commit = {}
                 else
-                    blame_info[k] = v
+                    if field == 'author-time' or field == 'committer-time' then
+                        commit[k .. '-human'] = show_date_relative(v)
+                        commit[k] = os.date('%Y-%m-%d %H:%M:%S', v)
+                    else
+                        commit[k] = v
+                    end
                 end
-
             end
         end
     end
 
-    -- uncaught or unexpected error
-    if lines:match("^fatal") or lines:match("^error") then -- if the call to git show fails
-        err = "nvim-blamer.lua: unexpected err=" .. lines
-    elseif not blame_info.hash then
-        err = "nvim-blamer.lua: failed to get hash, out=" .. lines
+    for k,v in pairs(commits) do
+        print(k,v)
+        for ck, cv in pairs(v) do
+            print("    " .. ck .. cv)
+        end
     end
 
-    return blame_info, err
+    line_to_hash   = hashes
+    hash_to_commit = commits
+end
+
+
+local job_event = function(chan_id, data, event)
+    if event == 'stdout' then
+        table.move(data, 1, #data, #job_output + 1, job_output)
+    elseif event == 'exit' then
+        vim.api.nvim_command('echomsg "background blame complete"')
+        blame_parse(job_output)
+        vim.api.nvim_command('echomsg "background parse complete"')
+
+        job_id     = nil
+        job_output = {}
+    end
+end
+
+local blame_launch = function(filename)
+    -- TODO need some checking here before we actually launch a job -- 
+    print("starting background blame")
+    local command = "git blame --porcelain --incremental " .. filename
+    job_id = vim.fn.jobstart(command, { on_stdout = job_event, on_exit = job_event })
+    return
+end
+
+-- git_blame_line_info returns (blame_info, error)
+local git_blame_line_info = function(filename, line_num)
+
+    local err = nil
+
+    local hash = line_to_hash[line_num]
+    print("hash value is: ", hash)
+    if hash == nil then
+        -- either this file isn't in git or our background job is running.
+
+        print("job_id value is: ", job_id)
+        if job_id == nil then
+            job_id = blame_launch(filename)
+        end
+
+        -- regardless, there's nothing to show right now, so just return
+        return nil, err
+    end
+
+    local info = hash_to_commit[hash]
+    if info == nil then
+        return nil, err
+    end
+
+    return info, err
 end
 
 local M = {

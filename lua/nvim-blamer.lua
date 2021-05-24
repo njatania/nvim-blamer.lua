@@ -19,7 +19,7 @@ local config = {
     show_error = false,
 }
 
--- skip scratch buffer or unkown filetype, nvim's terminal window, and other known filetypes need to bypass
+-- skip scratch buffer or unknown filetype, nvim's terminal window, and other known filetypes need to bypass
 local bypass_ft = { '', 'bin', '.', 'vim-plug', 'NvimTree', 'startify', 'nerdtree' }
 
 function M.setup(user_opts)
@@ -31,6 +31,7 @@ function M.show()
     if not config.enable then
         return
     end
+
     if vim.bo.buftype ~= '' then
         return
     end
@@ -65,7 +66,8 @@ function M.show()
         -- no need to display blame info, just return
         return
     end
-    -- set virtual text for namespace 2 with the content from git and assign it to the higlight group 'GitLens'
+
+    -- set virtual text for namespace 2 with the content from git and assign it to the higlight group
     -- https://neovim.io/doc/user/api.html#nvim_buf_set_virtual_text()
     ns_id = api.nvim_create_namespace('NvimBlamer')
     api.nvim_buf_set_virtual_text(buf, ns_id, line[1] - 1, { { text, hi_name } }, {})
