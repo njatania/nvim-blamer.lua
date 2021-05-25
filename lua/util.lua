@@ -179,10 +179,16 @@ local blame_launch = function(filename)
     end
 
     local command = "git -C " .. dir .. " blame --porcelain --incremental " .. name
-    print("starting background blame with command: '" .. command .. "'")
+    -- print("starting background blame with command: '" .. command .. "'")
     vim.b.blamer_job_id = vim.fn.jobstart(command, { on_stdout = job_event, on_exit = job_event })
     vim.b.blamer_job_start = os.time()
     return
+end
+
+
+local blame_bg_update = function(filename)
+    -- launch a git blame into the background, when it's done we'll start to see updates
+    blame_launch(filename)
 end
 
 -- git_blame_line_info returns (blame_info, error)
@@ -215,7 +221,8 @@ end
 
 local M = {
     git_blame_line_info = git_blame_line_info,
-    show_date_relative = show_date_relative,
+    show_date_relative  = show_date_relative,
+    blame_bg_update     = blame_bg_update,
 }
 
 return M

@@ -27,19 +27,37 @@ function M.setup(user_opts)
     config = vim.tbl_extend('force', config, opts)
 end
 
-function M.show()
+function M.blameable()
     if not config.enable then
-        return
+        return false
     end
 
     if vim.bo.buftype ~= '' then
-        return
+        return false
     end
 
     for _, v in ipairs(bypass_ft) do
         if vim.bo.filetype == v then
-            return
+            return false
         end
+    end
+
+    return true
+end
+
+
+function M.update()
+    if not M.blameable() then
+        return
+    end
+
+    local filename = vim.fn.expand('%')
+    util.blame_bg_update(filename)
+end
+
+function M.show()
+    if not M.blameable() then
+        return
     end
 
     -- clear out virtual text from namespace ns_id (the namespace we will set later)
